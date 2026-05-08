@@ -1,0 +1,129 @@
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: omni-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: omni_merchant
+      MYSQL_USER: omnimerchant
+      MYSQL_PASSWORD: omnimerchant123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: omni-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: omni-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: omni_merchant
+      POSTGRES_USER: omnimerchant
+      POSTGRES_PASSWORD: omnimerchant123
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omnimerchant -d omni_merchant"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.1.4
+    container_name: omni-rocketmq-namesrv
+    restart: unless-stopped
+    command: sh mqnamesrv
+    ports:
+      - "9876:9876"
+    environment:
+      JAVA_OPT_EXT: "-Xms512m -Xmx512m"
+
+  rocketmq-broker:
+    image: apache/rocketmq:5.1.4
+    container_name: omni-rocketmq-broker
+    restart: unless-stopped
+    command: sh mqbroker -n rocketmq-namesrv:9876
+    ports:
+      - "10909:10909"
+      - "10911:10911"
+    environment:
+      JAVA_OPT_EXT: "-Xms512m -Xmx512m"
+      NAMESRV_ADDR: "rocketmq-namesrv:9876"
+    depends_on:
+      - rocketmq-namesrv
+
+  rocketmq-dashboard:
+    image: apacherocketmq/rocketmq-dashboard:latest
+    container_name: omni-rocketmq-dashboard
+    restart: unless-stopped
+    ports:
+      - "18080:8080"
+    environment:
+      JAVA_OPTS: "-Drocketmq.namesrv.addr=rocketmq-namesrv:9876"
+    depends_on:
+      - rocketmq-namesrv
+
+  app:
+    build: .
+    container_name: omni-app
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      MYSQL_HOST: mysql
+      REDIS_HOST: redis
+      PG_HOST: postgres
+      ROCKETMQ_NAMESRV: rocketmq-namesrv:9876
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      JWT_SECRET: ${JWT_SECRET:-OmniMerchantSecretKey2024DemoAtLeast256Bits!!}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  web:
+    build: ./omnimerchant-web
+    container_name: omni-web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - app
+
+volumes:
+  mysql-data:
+  redis-data:
+  pg-data:
