@@ -26,9 +26,15 @@ public class AsyncIndexingConfig {
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.setTaskDecorator(runnable -> {
             var tenantId = TenantContextHolder.get();
+            var tenantFilterDisabled = TenantContextHolder.isTenantFilterDisabled();
             return () -> {
                 try {
-                    TenantContextHolder.set(tenantId);
+                    if (tenantId != null) {
+                        TenantContextHolder.set(tenantId);
+                    }
+                    if (tenantFilterDisabled) {
+                        TenantContextHolder.disableTenantFilter();
+                    }
                     runnable.run();
                 } finally {
                     TenantContextHolder.clear();
