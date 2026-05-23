@@ -3,6 +3,7 @@ package com.omnimerchant.admin.filter;
 import com.omnimerchant.common.dto.R;
 import com.omnimerchant.common.util.JwtUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.omnimerchant.tenant.context.TenantContextHolder;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -54,8 +55,11 @@ public class AdminAuthFilter implements Filter {
             return;
         }
 
-        // Admin-protected paths — require JWT
-        if (ADMIN_PATHS.stream().anyMatch(path::startsWith)) {
+        boolean adminPath = ADMIN_PATHS.stream().anyMatch(path::startsWith);
+
+        // Admin-protected paths — require JWT and explicitly bypass tenant SQL filtering.
+        // Customer-facing tenant-scoped paths must still provide X-Tenant-Id and remain fail-closed.
+        if (adminPath) {
             String authHeader = request.getHeader("Authorization");
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
                 writeUnauthorized(response, "缺少认证令牌");
@@ -66,9 +70,16 @@ public class AdminAuthFilter implements Filter {
                 writeUnauthorized(response, "令牌无效或已过期");
                 return;
             }
+            TenantContextHolder.disableTenantFilter();
         }
 
-        chain.doFilter(req, res);
+        try {
+            chain.doFilter(req, res);
+        } finally {
+            if (adminPath) {
+                TenantContextHolder.clear();
+            }
+        }
     }
 
     private void writeUnauthorized(HttpServletResponse response, String message) throws IOException {
