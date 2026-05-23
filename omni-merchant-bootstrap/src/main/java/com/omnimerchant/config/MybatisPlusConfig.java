@@ -4,12 +4,8 @@ import com.baomidou.mybatisplus.annotation.DbType;
 import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
-import com.baomidou.mybatisplus.extension.plugins.handler.TenantLineHandler;
 import com.baomidou.mybatisplus.extension.plugins.inner.TenantLineInnerInterceptor;
-import com.omnimerchant.tenant.context.TenantContextHolder;
 import lombok.extern.slf4j.Slf4j;
-import net.sf.jsqlparser.expression.Expression;
-import net.sf.jsqlparser.expression.LongValue;
 import org.apache.ibatis.reflection.MetaObject;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.context.annotation.Bean;
@@ -46,28 +42,8 @@ public class MybatisPlusConfig {
         var interceptor = new MybatisPlusInterceptor();
 
         // 多租户 SQL 自动注入（在最外层，确保所有查询都带上 tenant_id）
-        interceptor.addInnerInterceptor(new TenantLineInnerInterceptor(new TenantLineHandler() {
-            @Override
-            public Expression getTenantId() {
-                var tenantId = TenantContextHolder.get();
-                if (tenantId != null) {
-                    return new LongValue(tenantId);
-                }
-                // 无租户上下文时放行（查询 tenant 表本身等场景）
-                return null;
-            }
-
-            @Override
-            public String getTenantIdColumn() {
-                return "tenant_id";
-            }
-
-            @Override
-            public boolean ignoreTable(String tableName) {
-                // 这些表不需要 tenant_id 过滤
-                return IGNORE_TABLES.contains(tableName.toLowerCase());
-            }
-        }));
+        interceptor.addInnerInterceptor(new TenantLineInnerInterceptor(
+                new FailClosedTenantLineHandler(IGNORE_TABLES)));
 
         // 分页插件
         var pagination = new PaginationInnerInterceptor(DbType.MYSQL);
