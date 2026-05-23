@@ -53,8 +53,12 @@ public class MybatisPlusConfig {
                 if (tenantId != null) {
                     return new LongValue(tenantId);
                 }
-                // 无租户上下文时放行（查询 tenant 表本身等场景）
-                return null;
+                if (TenantContextHolder.isTenantFilterDisabled()) {
+                    return null;
+                }
+                throw new IllegalStateException(
+                        "Missing tenant context for tenant-scoped SQL. " +
+                        "Set X-Tenant-Id on request or explicitly disable tenant filter for trusted admin/system flows.");
             }
 
             @Override
@@ -65,7 +69,8 @@ public class MybatisPlusConfig {
             @Override
             public boolean ignoreTable(String tableName) {
                 // 这些表不需要 tenant_id 过滤
-                return IGNORE_TABLES.contains(tableName.toLowerCase());
+                return IGNORE_TABLES.contains(tableName.toLowerCase())
+                        || TenantContextHolder.isTenantFilterDisabled();
             }
         }));
 
