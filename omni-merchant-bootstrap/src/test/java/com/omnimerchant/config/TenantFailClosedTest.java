@@ -110,6 +110,18 @@ class TenantFailClosedTest {
     }
 
     @Test
+    void tenantInterceptorShouldAllowPreflightWithoutTenantHeader() throws Exception {
+        var request = new MockHttpServletRequest("OPTIONS", "/api/chat/stream");
+        var response = new MockHttpServletResponse();
+
+        var proceed = tenantInterceptor.preHandle(request, response, new Object());
+
+        assertThat(proceed).isTrue();
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(TenantContextHolder.get()).isNull();
+    }
+
+    @Test
     void tenantInterceptorShouldAllowPublicPathsWithoutTenantHeader() throws Exception {
         var request = new MockHttpServletRequest("GET", "/api/health");
         var response = new MockHttpServletResponse();
