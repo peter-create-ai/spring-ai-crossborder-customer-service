@@ -148,7 +148,7 @@ public class ReActAgentService {
                         return Flux.just("[FALLBACK] I'm having trouble processing your request. "
                                 + "Please try again or ask to speak with a human agent.");
                     });
-        });
+        }).doFinally(signalType -> TenantContextHolder.clear());
     }
 
     private Flux<String> streamWithBreaker(Supplier<Flux<String>> supplier, String modelName) {
